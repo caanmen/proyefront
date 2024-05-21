@@ -1,15 +1,9 @@
 from flask import Flask, request, jsonify
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from datetime import datetime
 import psycopg2
 import psycopg2.extras
 
-
 app = Flask(__name__)
-app.config['JWT_SECRET_KEY'] = 'jwt_super_secreto'
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  
-
-jwt = JWTManager(app)
 
 def get_db_connection():
     return psycopg2.connect(
@@ -28,7 +22,6 @@ def serialize_reserva(reserva):
         'detalle': reserva['detalle']
     }
 
-
 @app.route('/')
 def home():
     return 'Bienvenido a la API de ReservaFacil!'
@@ -46,19 +39,12 @@ def login():
     conn.close()
 
     if user_info:
-        access_token = create_access_token(identity={'user_id': user_info[0], 'tipo_usuario': user_info[1]})
-        return jsonify(access_token=access_token), 200
+        return jsonify(user_id=user_info[0], tipo_usuario=user_info[1]), 200
     else:
         return jsonify({"error": "Credenciales inválidas"}), 401
 
-
 @app.route('/reservas', methods=['POST'])
-@jwt_required()
 def crear_reserva():
-    claims = get_jwt_identity()
-    if claims['tipo_usuario'] not in ['super_administrador', 'administrador', 'usuario']:
-        return jsonify({'error': 'Acción no permitida'}), 403
-
     data = request.get_json()
     if not data:
         return jsonify({'error': 'No se recibieron datos'}), 400
@@ -74,7 +60,7 @@ def crear_reserva():
     except ValueError as e:
         return jsonify({"error": f"Formato de fecha o hora incorrecto: {str(e)}"}), 400
 
-    usuario_responsable = claims['user_id']  # Obtiene el ID del usuario desde el JWT
+    usuario_responsable = data['usuario_responsable']
 
     conn = get_db_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
@@ -109,15 +95,8 @@ def crear_reserva():
         cursor.close()
         conn.close()
 
-
-
 @app.route('/delete_reserva/<int:reserva_id>', methods=['DELETE'])
-@jwt_required()
 def delete_reserva(reserva_id):
-    claims = get_jwt_identity()
-    if claims['tipo_usuario'] != 'super_administrador':
-        return jsonify({'error': 'Solo el super administrador puede eliminar reservas'}), 403
-
     conn = get_db_connection()
     cursor = conn.cursor()
     try:

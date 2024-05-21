@@ -1,15 +1,9 @@
 from flask import Flask, request, jsonify
-from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt
 import psycopg2
 import psycopg2.extras
-from flask_jwt_extended import get_jwt
-
-
 
 app = Flask(__name__)
 app.secret_key = 'tu_super_secreto'
-app.config['JWT_SECRET_KEY'] = 'jwt_super_secreto'
-jwt = JWTManager(app)
 
 class DatabaseConnection:
     connection = None
@@ -61,7 +55,6 @@ def create_user():
         if conn:
             conn.close()
 
-
 @app.route('/login', methods=['POST'])
 def login():
     credentials = request.json
@@ -80,8 +73,7 @@ def login():
         user = cursor.fetchone()
         if user:
             additional_claims = {"tipo_usuario": user['tipo_usuario']}
-            access_token = create_access_token(identity=user['correo'], additional_claims=additional_claims)
-            return jsonify(access_token=access_token), 200
+            return jsonify(user=user['correo'], tipo_usuario=additional_claims), 200
         else:
             return jsonify({'error': 'Credenciales inválidas'}), 401
     except psycopg2.DatabaseError as e:
@@ -93,7 +85,6 @@ def login():
             conn.close()
 
 @app.route('/user/<int:user_id>', methods=['GET'])
-@jwt_required()
 def get_user(user_id):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -109,14 +100,8 @@ def get_user(user_id):
         cursor.close()
         conn.close()
 
-
 @app.route('/user/<int:user_id>', methods=['PUT'])
-@jwt_required()
 def update_user(user_id):
-    claims = get_jwt()  # Get the claims from the JWT
-    if claims['tipo_usuario'] == 'usuario':
-        return jsonify({'error': 'Acción no permitida'}), 403
-
     user_details = request.json
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -137,12 +122,7 @@ def update_user(user_id):
         conn.close()
 
 @app.route('/user/<int:user_id>', methods=['DELETE'])
-@jwt_required()
 def delete_user(user_id):
-    claims = get_jwt()
-    if claims['tipo_usuario'] not in ['super_administrador', 'administrador']:
-        return jsonify({'error': 'Acción no permitida'}), 403
-
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -157,9 +137,6 @@ def delete_user(user_id):
     finally:
         cursor.close()
         conn.close()
-
-
-
 
 if __name__ == '__main__':
     app.run(debug=True, port=3200)

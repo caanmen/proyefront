@@ -1,13 +1,7 @@
 from flask import Flask, request, jsonify
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 import psycopg2
 
-
 app = Flask(__name__)
-app.config['JWT_SECRET_KEY'] = 'jwt_super_secreto'
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = False  
-
-jwt = JWTManager(app)
 
 def get_db_connection():
     return psycopg2.connect(
@@ -33,23 +27,17 @@ def login():
     conn.close()
 
     if user_info:
-        access_token = create_access_token(identity={'user_id': user_info[0], 'tipo_usuario': user_info[1]})
-        return jsonify(access_token=access_token), 200
+        return jsonify(user_id=user_info[0], tipo_usuario=user_info[1]), 200
     else:
         return jsonify({"error": "Credenciales inválidas"}), 401
 
 @app.route('/mesas', methods=['POST'])
-@jwt_required()
 def crear_mesa():
-    claims = get_jwt_identity()
-    if claims['tipo_usuario'] not in ['super_administrador', 'administrador']:
-        return jsonify({'error': 'Acción no permitida'}), 403
-
     data = request.get_json()
     numero_mesa = data['numero_mesa']
     personas = data['personas']
     localizacion = data['localizacion']
-    usuario_responsable = claims['user_id']
+    usuario_responsable = data['usuario_responsable']
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -62,29 +50,23 @@ def crear_mesa():
         conn.commit()
         return jsonify({"mensaje": "Mesa creada con éxito", "numero_mesa": numero_mesa}), 201
     except psycopg2.DatabaseError as e:
-        conn.rollback()  # Asegura revertir cualquier cambio si ocurre un error
+        conn.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
         cursor.close()
         conn.close()
 
 @app.route('/mesas/<int:numero_mesa>', methods=['PUT'])
-@jwt_required()
 def actualizar_mesa(numero_mesa):
-    claims = get_jwt_identity()
-    if claims['tipo_usuario'] not in ['super_administrador', 'administrador']:
-        return jsonify({'error': 'Acción no permitida'}), 403
-
     data = request.get_json()
     personas = data.get('personas')
     localizacion = data.get('localizacion')
     disponible = data.get('disponible', True)
-    usuario_responsable = claims['user_id']
+    usuario_responsable = data['usuario_responsable']
 
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # Comprobar si la mesa está actualmente reservada
         cursor.execute("SELECT reserva_id FROM mesas WHERE numero_mesa = %s", (numero_mesa,))
         mesa_info = cursor.fetchone()
         if mesa_info and mesa_info['reserva_id'] is not None and disponible:
@@ -100,19 +82,14 @@ def actualizar_mesa(numero_mesa):
         conn.commit()
         return jsonify({"mensaje": "Mesa actualizada con éxito", "numero_mesa": updated_mesa[0]}), 200
     except psycopg2.DatabaseError as e:
-        conn.rollback()  # Asegura revertir cualquier cambio si ocurre un error
+        conn.rollback()
         return jsonify({'error': str(e)}), 500
     finally:
         cursor.close()
         conn.close()
 
 @app.route('/mesas/<int:numero_mesa>', methods=['GET'])
-@jwt_required()
 def get_mesa(numero_mesa):
-    claims = get_jwt_identity()
-    if claims['tipo_usuario'] not in ['super_administrador', 'administrador']:
-        return jsonify({'error': 'Acción no permitida'}), 403
-
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -135,15 +112,8 @@ def get_mesa(numero_mesa):
         cursor.close()
         conn.close()
 
-
-
 @app.route('/mesas/<int:numero_mesa>', methods=['DELETE'])
-@jwt_required()
 def delete_mesa(numero_mesa):
-    claims = get_jwt_identity()
-    if claims['tipo_usuario'] != 'super_administrador':
-        return jsonify({'error': 'Acción no permitida'}), 403
-
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
